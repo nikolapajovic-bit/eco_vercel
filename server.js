@@ -14,8 +14,6 @@ const Tip = require("./models/tips");
 const Center = require("./models/centers");
 const Cars = require("./models/cars");
 
-app.use("/api/tips", tipRoutes);
-
 const PORT = process.env.PORT || 8080;
 const MONGO_URI =
   process.env.MONGO_URI || "mongodb://localhost:27017/ecoliving";

@@ -1,0 +1,9 @@
+{
+  "build": {
+    "command": "npm install"
+  },
+  "start": {
+    "command": "node index.js",
+    "port": 3000
+  }
+}

@@ -23,6 +23,7 @@ const carSchema = new mongoose.Schema({
           return this.fuel_type === "Electric";
         },
       },
+      note: String, // optional context, e.g. "hybrid-only from 2025"
     },
   ],
 });

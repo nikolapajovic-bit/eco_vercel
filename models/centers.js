@@ -6,6 +6,7 @@ const centerSchema = new mongoose.Schema({
   material: String,
   latitude: String,
   longitude: String,
+  country: String, // added to support filtering by country in the app
 });
 
 module.exports = mongoose.model("Center", centerSchema);

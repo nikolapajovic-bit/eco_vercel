@@ -10,6 +10,7 @@ app.use(cors());
 app.use(express.json());
 
 const tipRoutes = require("./routes/tips");
+const authRoutes = require("./routes/auth");
 const Tip = require("./models/tips");
 const Center = require("./models/centers");
 const Cars = require("./models/cars");
@@ -26,6 +27,8 @@ mongoose
 app.get("/", (req, res) => {
   res.send("EcoLiving API is running...");
 });
+
+app.use("/api/auth", authRoutes);
 
 app.get("/api/tips", async (req, res) => {
   try {

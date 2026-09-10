@@ -10,7 +10,20 @@ const requireAuth = require("../middleware/auth");
 // Services ID) as environment variables once you've created them.
 const googleClient = new OAuth2Client(process.env.GOOGLE_CLIENT_ID);
 
+const TRIAL_DAYS = 7;
+
 function publicUser(user) {
+  const trialEndsAt = new Date(
+    user.createdAt.getTime() + TRIAL_DAYS * 24 * 60 * 60 * 1000,
+  );
+  const now = new Date();
+
+  const isPro =
+    user.subscriptionStatus === "active" &&
+    (!user.subscriptionExpiresAt || user.subscriptionExpiresAt > now);
+  const inTrial = !isPro && now < trialEndsAt;
+  const hasAccess = isPro || inTrial;
+
   return {
     id: user._id,
     name: user.name,
@@ -18,6 +31,14 @@ function publicUser(user) {
     avatarUrl: user.avatarUrl,
     provider: user.provider,
     streak: user.streak,
+    subscription: {
+      status: user.subscriptionStatus,
+      plan: user.subscriptionPlan,
+      trialEndsAt,
+      isPro,
+      inTrial,
+      hasAccess,
+    },
   };
 }
 
@@ -152,29 +173,72 @@ router.get("/me", requireAuth, async (req, res) => {
   res.json({ user: publicUser(req.user) });
 });
 
+// ── Delete account (required by App Store / Google Play policy) ──
+router.delete("/me", requireAuth, async (req, res) => {
+  try {
+    await User.findByIdAndDelete(req.user._id);
+    res.json({ success: true });
+  } catch (err) {
+    console.error("Delete account error:", err);
+    res.status(500).json({ error: "Failed to delete account" });
+  }
+});
+
+// ── Subscribe (SKELETON — no real payment yet) ──
+// TODO: replace this with real receipt/purchase verification once
+// RevenueCat (or direct StoreKit/Play Billing) is integrated. Right now it
+// just flips the flag so the paywall flow can be built and tested end to
+// end before payment processing exists.
+router.post("/subscribe", requireAuth, async (req, res) => {
+  try {
+    const { plan } = req.body; // "monthly" | "yearly"
+    const user = req.user;
+    const days = plan === "yearly" ? 365 : 30;
+
+    user.subscriptionStatus = "active";
+    user.subscriptionPlan = plan === "yearly" ? "yearly" : "monthly";
+    user.subscriptionExpiresAt = new Date(
+      Date.now() + days * 24 * 60 * 60 * 1000,
+    );
+    await user.save();
+
+    res.json({ user: publicUser(user) });
+  } catch (err) {
+    console.error("Subscribe error:", err);
+    res.status(500).json({ error: "Failed to update subscription" });
+  }
+});
+
 // ── Streak check-in ──
 router.post("/streak/checkin", requireAuth, async (req, res) => {
   const user = req.user;
   const today = startOfDay(new Date());
-  const last = user.streak.lastCheckIn
+  const last = user.streak?.lastCheckIn
     ? startOfDay(user.streak.lastCheckIn)
     : null;
 
+  let newCount;
   if (!last) {
-    user.streak.count = 1;
+    newCount = 1;
   } else {
     const diffDays = Math.round((today - last) / 86400000);
     if (diffDays === 0) {
-      // already checked in today — no change
+      newCount = user.streak.count; // already checked in today — no change
     } else if (diffDays === 1) {
-      user.streak.count += 1;
+      newCount = user.streak.count + 1;
     } else {
-      user.streak.count = 1; // streak broken, restart
+      newCount = 1; // streak broken, restart
     }
   }
 
-  user.streak.lastCheckIn = new Date();
+  // Reassigning the whole nested object (rather than mutating
+  // user.streak.count / user.streak.lastCheckIn individually) plus
+  // markModified guarantees Mongoose actually persists the change — direct
+  // property mutation on nested schema objects can silently fail to save.
+  user.streak = { count: newCount, lastCheckIn: new Date() };
+  user.markModified("streak");
   await user.save();
+
   res.json({ streak: user.streak });
 });
 
